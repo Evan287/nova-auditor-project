@@ -9,7 +9,7 @@ load_dotenv()
 BUCKET_NAME = "nova-multimodal-verify"
 REGION = os.getenv("AWS_REGION")
 
-FILES_TO_UPLOAD = {
+FILES_TO_UPLOAD = { #Using a dictionary makes it easy to add more "evidence" photos later without rewriting the upload logic
     "packing_slip.png": "verifications/packing_slip.png",
     "box_contents.png": "verifications/box_contents.png"
 }
@@ -24,7 +24,7 @@ def setup_verification_storage():
         else:
             s3.create_bucket(
                 Bucket=BUCKET_NAME,
-                CreateBucketConfiguration={"LocationConstraint": REGION}
+                CreateBucketConfiguration={"LocationConstraint": REGION} #This enables Cross-Region Support so that users who aren't using us-east-1 can access the program
             )
             print(f"✅ Bucket '{BUCKET_NAME}' created successfully.")
     except Exception as e:
