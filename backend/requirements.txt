@@ -1,0 +1,15 @@
+# AI Orchestration (The Brain)
+strands-agents>=1.0.0
+strands-agents-tools>=0.2.0
+
+# Amazon Nova Models & Browser Automation (The Hands)
+nova-act
+bedrock_agentcore
+boto3
+
+# Environment & Data (The Memory)
+python-dotenv
+mysql-connector-python
+
+# Image Processing (The Eyes)
+Pillow
