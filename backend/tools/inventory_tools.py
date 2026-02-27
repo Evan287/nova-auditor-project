@@ -15,25 +15,24 @@ def get_db_connection():
 
 def fetch_low_stock_report():
     """
-    Tool for the AI: Queries the DB for items where stock is below the threshold
-    Returns a string summary for the AI to process
+    Queries the DB for items where stock is below threshold.
+    Returns a list of dicts for the AI and frontend to process.
     """
+    conn = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
 
-        #This query finds items needing attention
         query = "SELECT part_name, stock_level, threshold, vendor_url FROM inventory WHERE stock_level < threshold"
         cursor.execute(query)
         results = cursor.fetchall()
 
         cursor.close()
-        conn.close()
+        return results  # Always returns a list (empty or populated)
 
-        if not results:
-            return "Inventory Check: All items are currently above safety threshold"
-        
-        return f"Inventory Alert: The following items are low: {results}"
-    
     except Exception as e:
-        return f"Error accessing database: {str(e)}"
+        raise RuntimeError(f"Error accessing database: {str(e)}")  # Let main.py handle it
+
+    finally:
+        if conn and conn.is_connected():
+            conn.close()

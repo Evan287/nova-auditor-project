@@ -1,13 +1,5 @@
-"use client"; //In Next.js, components are "Server Components by default. They have no interactivity. Use client tells Next.JS this component needs to handle clicks, manage state, and run in the user's browser"
+"use client";
 
-/**
- * Flow
- * User Clicks Button -> Triggers runAudit
- * loading becomes true -> Button shows a spinner
- * Browser sends POST to lambda -> Python runs the Nova AI
- * Lambda sends JSON back -> setRestult(data) is called
- * React notices State Change -> The UI Automatically re-renders to show the Results Section
- */
 import { useState } from "react";
 import {
   ClipboardCheck,
@@ -17,18 +9,19 @@ import {
 } from "lucide-react";
 
 interface AuditResult {
-  inventory_status: unknown; // Or a more specific type if you know it
+  inventory_status: unknown;
   agent_analysis: string;
   discrepancy_found: boolean;
 }
 
 export default function AuditDashboard() {
-  const [loading, setLoading] = useState(false); // Show spinner so the user knows the AI is working and doesn't click Run Audit repeatedly
-  const [result, setResult] = useState<AuditResult | null>(null); //Holds the data we get back from the python API. Starts as null and updates once the AI finishes
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<AuditResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const runAudit = async () => {
-    //Ascrynchronous function that awaits the response from AWS lambda so the rest of the website doesn't freeze while waiting for the AI
     setLoading(true);
+    setError(null);
     try {
       const response = await fetch(
         "https://jmawfalu63vtahkogyqrlii5ji0qsmvy.lambda-url.us-west-1.on.aws/run-audit",
@@ -38,10 +31,20 @@ export default function AuditDashboard() {
           body: JSON.stringify({ check_type: "discrepancy" }),
         },
       );
-      const data = await response.json();
+
+      const text = await response.text();
+      console.log("Raw response:", text);
+
+      if (!response.ok) {
+        setError(`Server error ${response.status}: ${text}`);
+        return;
+      }
+
+      const data = JSON.parse(text);
       setResult(data);
     } catch (error) {
       console.error("Audit failed", error);
+      setError(String(error));
     } finally {
       setLoading(false);
     }
@@ -71,8 +74,15 @@ export default function AuditDashboard() {
         </button>
       </div>
 
+      {/* Error Section */}
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-xl text-sm">
+          {error}
+        </div>
+      )}
+
       {/* Results Section */}
-      {result && ( // shortcut in React that says "If we have data, show the dashboard. If not then show nothing"
+      {result && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in fade-in slide-in-from-bottom-4">
           {/* Inventory Table Summary */}
           <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
@@ -86,7 +96,6 @@ export default function AuditDashboard() {
 
           {/* AI Analysis Card */}
           <div
-            //Template literal. Checks if discrepancy_found boolean from the python backend, is TRUE then apply red, is FALSE apply green tailwind classes
             className={`p-6 rounded-xl shadow-sm border ${result.discrepancy_found ? "bg-red-50 border-red-200" : "bg-green-50 border-green-200"}`}
           >
             <h3 className="flex items-center gap-2 font-semibold text-slate-700 mb-4">

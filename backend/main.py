@@ -11,8 +11,27 @@ from pydantic import BaseModel #Ensures that the data coming into my API is form
 from inventory_tools import fetch_low_stock_report
 import boto3 # The official AWS SDK. It’s what we use to talk to S3 and the Nova AI model in Bedrock.
 import json
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi import Request
+from fastapi.responses import JSONResponse
 
 app = FastAPI() #Creates a web application instance that will handle requests, routes, validation, and documentation
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    return JSONResponse(
+        status_code=500,
+        content={"detail": str(exc)}
+    )
+
+# Add this block right after 'app = FastAPI()'
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"], # Allow all origins for the hackathon
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 #Allows lambda to talk to FastAPI
 handler = Mangum(app) #AWS Lambda calls this handler to start the engine
@@ -24,18 +43,35 @@ class AuditRequest(BaseModel): #Defines what the request body should look like.
 def read_root():
     return {"status": "Auditor API is live"}
 
-@app.post("/run-audit") #Use POST instead of get to trigger this run-audit action 
-def run_audit(request: AuditRequest): #Initializes the bedrock client.How the code prepares to send low-inventory numbers and S3 images to the NOVA AI model for analysis
-    #1 Fetch From MySQL (RDS) AMAZON RDS is a fully managed cloud database that simplifies the process of setting up, operating, and scaling a MySQL relational database
+
+@app.post("/run-audit")
+def run_audit(request: AuditRequest):
     report = fetch_low_stock_report()
 
-    #2 Logic to invoke Nova via Bedrock
-    bedrock = boto3.client("bedrock-runtime",region_name=os.getenv("AWS_REGION"))
+    bedrock = boto3.client("bedrock-runtime", region_name=os.getenv("us-west-1"))
 
-    #Example Nova lite call for the hackathon
+    prompt = f"Here is a low stock inventory report: {json.dumps(report)}. Identify discrepancies and suggest reorder quantities."
+
+    response = bedrock.invoke_model(
+    modelId="us.amazon.nova-lite-v1:0",
+    body=json.dumps({
+        "messages": [{"role": "user", "content": [{"text": prompt}]}],
+        "inferenceConfig": {
+            "maxTokens": 512,
+            "temperature": 0.7
+        }
+    }),
+    contentType="application/json",
+    accept="application/json"
+)
+
+    result = json.loads(response["body"].read())
+
+    # Extract the text from Nova's response
+    agent_text = result["output"]["message"]["content"][0]["text"]
+
     return {
-        "inventory status": report,
-        "agent_analysis": "Nova Agent is analyzing S3 images...",
-        "discrepancy found": True
-    }
-    
+        "inventory_status": report,
+        "agent_analysis": agent_text,
+        "discrepancy_found": len(report) > 0
+}
