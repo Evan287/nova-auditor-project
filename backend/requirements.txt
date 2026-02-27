@@ -13,3 +13,8 @@ mysql-connector-python
 
 # Image Processing (The Eyes)
 Pillow
+
+#FastAPI
+fastapi
+uvicorn
+mangum
