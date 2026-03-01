@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+//Logos
 import {
   ClipboardCheck,
   AlertTriangle,
@@ -19,6 +20,7 @@ export default function AuditDashboard() {
   const [result, setResult] = useState<AuditResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  //runAudit Logic
   const runAudit = async () => {
     setLoading(true);
     setError(null);
@@ -93,7 +95,6 @@ export default function AuditDashboard() {
               {JSON.stringify(result.inventory_status, null, 2)}
             </pre>
           </div>
-
           {/* AI Analysis Card */}
           <div
             className={`p-6 rounded-xl shadow-sm border ${result.discrepancy_found ? "bg-red-50 border-red-200" : "bg-green-50 border-green-200"}`}
