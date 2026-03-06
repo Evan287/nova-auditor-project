@@ -43,7 +43,8 @@ class AuditRequest(BaseModel): #Defines what the request body should look like.
 def read_root():
     return {"status": "Auditor API is live"}
 
-
+#Run Audit button and logic
+#Communicate with Nova to get the discrepancies 
 @app.post("/run-audit")
 def run_audit(request: AuditRequest):
     report = fetch_low_stock_report()
