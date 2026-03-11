@@ -15,7 +15,7 @@ interface InventoryItem {
   threshold: number;
   vendor_url: string;
 }
-
+//Added InventoryItem object to replace unknown so that the item has a strict format
 interface AuditResult {
   inventory_status: InventoryItem[]; //array of InventoryItem objects
   agent_analysis: string;
