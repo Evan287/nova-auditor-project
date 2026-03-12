@@ -8,7 +8,7 @@ For this use case it is used to get env variables
 from fastapi import FastAPI #Imports the framework that handles web requests (GET, POST).
 from mangum import Mangum #This is the bridge. AWS Lambda doesn't understand FastAPI by default; Mangum "wraps" FastAPI so Lambda can run it.
 from pydantic import BaseModel #Ensures that the data coming into my API is formatted correctly
-from inventory_tools import fetch_low_stock_report
+from inventory_tools import fetch_low_stock_report, get_db_connection
 import boto3 # The official AWS SDK. It’s what we use to talk to S3 and the Nova AI model in Bedrock.
 import json
 from fastapi.middleware.cors import CORSMiddleware
@@ -33,6 +33,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+#Structure to approve a request, has the part and the quantity we need to purchase
+class ApproveRequest(BaseModel):
+    part_name: str 
+    quantity: int
+
+
 #Allows lambda to talk to FastAPI
 handler = Mangum(app) #AWS Lambda calls this handler to start the engine
 
@@ -42,6 +48,25 @@ class AuditRequest(BaseModel): #Defines what the request body should look like.
 @app.get("/") #GET Request to check if the server is awake 
 def read_root():
     return {"status": "Auditor API is live"}
+
+@app.post("/approve-order")
+def approve_order(request: ApproveRequest):
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        #Save the approval as an order in the database
+        cursor.execute(
+            "INSERT INTO orders (part_name, quantity, status, created_at) VALUES (%s, %s, 'approved', NOW())",
+            (request.part_name, request.quantity)
+        )
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        return{"success": True, "message": f"Order approved for {request.part_name}"}
+    except Exception as e:
+        raise RuntimeError(f"Failed to approve order: {str(e)}")
 
 #Run Audit button and logic
 #Communicate with Nova to get the discrepancies 
