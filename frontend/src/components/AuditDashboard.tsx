@@ -15,19 +15,30 @@ interface InventoryItem {
   threshold: number;
   vendor_url: string;
 }
-//Added InventoryItem object to replace unknown so that the item has a strict format
+
 interface AuditResult {
-  inventory_status: InventoryItem[]; //array of InventoryItem objects
+  inventory_status: InventoryItem[];
   agent_analysis: string;
   discrepancy_found: boolean;
 }
 
-// ADDED (new code, paste between AuditResult interface and export default)
-function AgentAnalysis({ text }: { text: string }) {
+function AgentAnalysis({
+  text,
+  onApprove,
+  approved,
+  approving,
+}: {
+  text: string;
+  onApprove: (partName: string, quantity: number) => void;
+  approved: Record<string, boolean>;
+  approving: Record<string, boolean>;
+}) {
   const lines = text.split("\n").filter((l) => l.trim() !== "");
+
   return (
     <div className="space-y-1 text-sm">
       {lines.map((line, i) => {
+        // ### Headers
         if (line.startsWith("### ")) {
           return (
             <p
@@ -38,23 +49,58 @@ function AgentAnalysis({ text }: { text: string }) {
             </p>
           );
         }
+
+        // Numbered list items with Approve button
         if (/^\d+\.\s/.test(line)) {
           const content = line
             .replace(/^\d+\.\s/, "")
             .replace(/\*\*(.*?)\*\*/g, "$1");
+          const partName = content.replace(/:$/, "").trim();
+          const qtyMatch = text.match(
+            new RegExp(`${partName}.*?\\*\\*?(\\d+) units?\\*\\*?`, "i"),
+          );
+          const quantity = qtyMatch ? parseInt(qtyMatch[1]) : 1;
+          const isApproved = approved[partName];
+          const isApproving = approving[partName];
+
           return (
-            <div key={i} className="flex gap-2 ml-2 mt-2">
-              <span className="font-bold text-slate-500 shrink-0">
-                {line.match(/^(\d+)/)?.[1]}.
-              </span>
-              <span className="font-semibold text-slate-700">{content}</span>
+            <div
+              key={i}
+              className="flex items-center justify-between ml-2 mt-2"
+            >
+              <div className="flex gap-2">
+                <span className="font-bold text-slate-500 shrink-0">
+                  {line.match(/^(\d+)/)?.[1]}.
+                </span>
+                <span className="font-semibold text-slate-700">{content}</span>
+              </div>
+              <button
+                onClick={() => onApprove(partName, quantity)}
+                disabled={isApproved || isApproving}
+                className={`text-xs px-3 py-1 rounded-full font-semibold transition-all duration-200 shrink-0 ml-2 ${
+                  isApproved
+                    ? "bg-green-100 text-green-600 border border-green-300 cursor-default"
+                    : isApproving
+                      ? "bg-slate-100 text-slate-400 border border-slate-200 cursor-wait"
+                      : "bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-100"
+                }`}
+              >
+                {isApproved
+                  ? "✓ Approved"
+                  : isApproving
+                    ? "Saving..."
+                    : "Approve Order"}
+              </button>
             </div>
           );
         }
+
+        // Bullet points: - **Label:** value
         if (line.startsWith("- ") || line.startsWith("  - ")) {
           const indent = line.startsWith("  - ");
           const content = line.replace(/^\s*- /, "");
           const boldMatch = content.match(/^\*\*(.*?)\*\*:?\s*(.*)/);
+
           if (boldMatch) {
             return (
               <div
@@ -71,6 +117,7 @@ function AgentAnalysis({ text }: { text: string }) {
               </div>
             );
           }
+
           return (
             <div
               key={i}
@@ -81,6 +128,8 @@ function AgentAnalysis({ text }: { text: string }) {
             </div>
           );
         }
+
+        // Plain text
         return (
           <p key={i} className="text-slate-600 ml-2 py-0.5 leading-relaxed">
             {line.replace(/\*\*(.*?)\*\*/g, "$1")}
@@ -98,18 +147,22 @@ function StockBar({ stock, threshold }: { stock: number; threshold: number }) {
   return (
     <div className="w-full bg-slate-200 rounded-full h-1.5 mt-1">
       <div
-        className={`h-1.5 rounded-full transition-all duration-700 ${critical ? "bg-red-500" : low ? "bg-amber-400" : "bg-emerald-500"}`}
+        className={`h-1.5 rounded-full transition-all duration-700 ${
+          critical ? "bg-red-500" : low ? "bg-amber-400" : "bg-emerald-500"
+        }`}
         style={{ width: `${Math.max(pct, critical ? 0 : 4)}%` }}
       />
     </div>
   );
 }
+
 export default function AuditDashboard() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<AuditResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [approved, setApproved] = useState<Record<string, boolean>>({});
+  const [approving, setApproving] = useState<Record<string, boolean>>({});
 
-  //runAudit Logic
   const runAudit = async () => {
     setLoading(true);
     setError(null);
@@ -138,6 +191,30 @@ export default function AuditDashboard() {
       setError(String(error));
     } finally {
       setLoading(false);
+    }
+  };
+
+  const approveOrder = async (partName: string, quantity: number) => {
+    setApproving((prev) => ({ ...prev, [partName]: true }));
+    try {
+      const response = await fetch(
+        "https://jmawfalu63vtahkogyqrlii5ji0qsmvy.lambda-url.us-west-1.on.aws/approve-order",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ part_name: partName, quantity }),
+        },
+      );
+      const text = await response.text();
+      if (!response.ok) {
+        setError(`Approval failed: ${text}`);
+        return;
+      }
+      setApproved((prev) => ({ ...prev, [partName]: true }));
+    } catch (err) {
+      setError(`Approval failed: ${String(err)}`);
+    } finally {
+      setApproving((prev) => ({ ...prev, [partName]: false }));
     }
   };
 
@@ -175,7 +252,7 @@ export default function AuditDashboard() {
       {/* Results Section */}
       {result && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in fade-in slide-in-from-bottom-4">
-          {/* Inventory Table Summary */}
+          {/* Inventory Cards */}
           <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
             <h3 className="flex items-center gap-2 font-semibold text-slate-700 mb-4">
               <ClipboardCheck className="text-blue-500" /> Database Status
@@ -229,7 +306,8 @@ export default function AuditDashboard() {
                 })}
             </div>
           </div>
-          {/* AI Analysis Card */}
+
+          {/* AI Analysis */}
           <div
             className={`p-6 rounded-xl shadow-sm border ${result.discrepancy_found ? "bg-red-50 border-red-200" : "bg-green-50 border-green-200"}`}
           >
@@ -242,7 +320,12 @@ export default function AuditDashboard() {
               AI Agent Reasoning
             </h3>
             <div className="overflow-y-auto max-h-80">
-              <AgentAnalysis text={result.agent_analysis} />
+              <AgentAnalysis
+                text={result.agent_analysis}
+                onApprove={approveOrder}
+                approved={approved}
+                approving={approving}
+              />
             </div>
           </div>
         </div>
