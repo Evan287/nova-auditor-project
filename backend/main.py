@@ -12,8 +12,9 @@ from inventory_tools import fetch_low_stock_report, get_db_connection
 import boto3 # The official AWS SDK. It’s what we use to talk to S3 and the Nova AI model in Bedrock.
 import json
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi import Request
+from fastapi import Request, UploadFile, File
 from fastapi.responses import JSONResponse
+import base64
 
 app = FastAPI() #Creates a web application instance that will handle requests, routes, validation, and documentation
 
@@ -67,6 +68,77 @@ def approve_order(request: ApproveRequest):
         return{"success": True, "message": f"Order approved for {request.part_name}"}
     except Exception as e:
         raise RuntimeError(f"Failed to approve order: {str(e)}")
+    
+@app.post("/verify-shipment")
+async def verify_shipment(file: UploadFile = File(...)):
+    try:
+        # Read the image and convert to base64
+        image_bytes = await file.read()
+        image_b64 = base64.b64encode(image_bytes).decode("utf-8")
+
+        # Fetch approved orders from the database
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT part_name, quantity FROM orders WHERE status = 'approved'")
+        orders = cursor.fetchall()
+        cursor.close()
+        conn.close()
+
+        # Build the prompt
+        orders_text = json.dumps(orders)
+        prompt = f"""You are a shipment verification agent. 
+        Here are the approved orders in our system: {orders_text}
+        
+        Carefully examine the shipment label in the image.
+        Extract the part name, quantity, and vendor info from the label.
+        Compare what you see against the approved orders.
+        
+        Report:
+        1. What you found on the label (part name, quantity, vendor)
+        2. Whether it matches an approved order
+        3. Any discrepancies or mismatches
+        4. Your recommendation (accept or reject the shipment)"""
+
+        # Call Nova with the image
+        bedrock = boto3.client("bedrock-runtime", region_name="us-west-1")
+        response = bedrock.invoke_model(
+            modelId="us.amazon.nova-lite-v1:0",
+            body=json.dumps({
+                "messages": [{
+                    "role": "user",
+                    "content": [
+                        {
+                            "image": {
+                                "format": "jpeg",
+                                "source": {
+                                    "bytes": image_b64
+                                }
+                            }
+                        },
+                        {
+                            "text": prompt
+                        }
+                    ]
+                }],
+                "inferenceConfig": {
+                    "maxTokens": 512,
+                    "temperature": 0.7
+                }
+            }),
+            contentType="application/json",
+            accept="application/json"
+        )
+
+        result = json.loads(response["body"].read())
+        analysis = result["output"]["message"]["content"][0]["text"]
+
+        return {
+            "analysis": analysis,
+            "discrepancy_found": "discrepancy" in analysis.lower() or "mismatch" in analysis.lower() or "reject" in analysis.lower()
+        }
+
+    except Exception as e:
+        raise RuntimeError(f"Shipment verification failed: {str(e)}")
 
 #Run Audit button and logic
 #Communicate with Nova to get the discrepancies 
