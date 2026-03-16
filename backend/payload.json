@@ -1,0 +1,1 @@
+﻿{"version":"2.0","routeKey":"GET /","rawPath":"/","rawQueryString":"","headers":{"content-type":"application/json"},"requestContext":{"http":{"method":"GET","path":"/","protocol":"HTTP/1.1"},"routeKey":"GET /","stage":"$default"},"isBase64Encoded":false}

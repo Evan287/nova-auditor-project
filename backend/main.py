@@ -109,11 +109,11 @@ async def verify_shipment(file: UploadFile = File(...)):
                     "content": [
                         {
                             "image": {
-                                "format": "jpeg",
-                                "source": {
-                                    "bytes": image_b64
-                                }
-                            }
+    "format": file.content_type.split("/")[1],
+    "source": {
+        "bytes": image_b64
+    }
+}
                         },
                         {
                             "text": prompt
@@ -134,7 +134,11 @@ async def verify_shipment(file: UploadFile = File(...)):
 
         return {
             "analysis": analysis,
-            "discrepancy_found": "discrepancy" in analysis.lower() or "mismatch" in analysis.lower() or "reject" in analysis.lower()
+            "discrepancy_found": "reject" in analysis.lower() or (
+    ("discrepancy" in analysis.lower() or "mismatch" in analysis.lower()) and
+    "no discrepan" not in analysis.lower() and
+    "no mismatch" not in analysis.lower()
+)
         }
 
     except Exception as e:
