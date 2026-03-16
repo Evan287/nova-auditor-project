@@ -62,9 +62,6 @@ function AgentAnalysis({
             ),
           );
           const quantity = qtyMatch ? parseInt(qtyMatch[1]) : 0;
-          console.log("partName:", partName);
-          console.log("qtyMatch:", qtyMatch);
-          console.log("quantity:", quantity);
           const isApproved = approved[partName];
           const isApproving = approving[partName];
 
