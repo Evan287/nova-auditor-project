@@ -54,18 +54,26 @@ def read_root():
 def approve_order(request: ApproveRequest):
     try:
         conn = get_db_connection()
-        cursor = conn.cursor()
+        cursor = conn.cursor(dictionary=True)
 
-        #Save the approval as an order in the database
+        # Look up vendor URL from inventory table
         cursor.execute(
-            "INSERT INTO orders (part_name, quantity, status, created_at) VALUES (%s, %s, 'approved', NOW())",
-            (request.part_name, request.quantity)
+            "SELECT vendor_url FROM inventory WHERE part_name = %s",
+            (request.part_name,)
+        )
+        inventory_item = cursor.fetchone()
+        vendor_url = inventory_item["vendor_url"] if inventory_item else None
+
+        # Save order with vendor URL
+        cursor.execute(
+            "INSERT INTO orders (part_name, quantity, status, vendor_url, created_at) VALUES (%s, %s, 'approved', %s, NOW())",
+            (request.part_name, request.quantity, vendor_url)
         )
         conn.commit()
         cursor.close()
         conn.close()
 
-        return{"success": True, "message": f"Order approved for {request.part_name}"}
+        return {"success": True, "message": f"Order approved for {request.part_name}"}
     except Exception as e:
         raise RuntimeError(f"Failed to approve order: {str(e)}")
     
@@ -86,18 +94,23 @@ async def verify_shipment(file: UploadFile = File(...)):
 
         # Build the prompt
         orders_text = json.dumps(orders)
-        prompt = f"""You are a shipment verification agent. 
-        Here are the approved orders in our system: {orders_text}
-        
-        Carefully examine the shipment label in the image.
-        Extract the part name, quantity, and vendor info from the label.
-        Compare what you see against the approved orders.
-        
-        Report:
-        1. What you found on the label (part name, quantity, vendor)
-        2. Whether it matches an approved order
-        3. Any discrepancies or mismatches
-        4. Your recommendation (accept or reject the shipment)"""
+        # Format orders more cleanly
+        # Format orders with vendor info
+        orders_summary = "\n".join([
+            f"- {o['part_name']}: {o['quantity']} units, vendor: {o.get('vendor_url', 'not specified')}"
+            for o in orders
+        ])
+
+        prompt = f"""You are a shipment verification assistant checking incoming deliveries.
+
+        Approved orders on file:
+        {orders_summary}
+
+        Please examine the shipment label in the image and:
+        1. List what you see on the label (part name, quantity, vendor)
+        2. Check if it matches one of the approved orders above
+        3. Note any differences in part name, quantity, or vendor
+        4. State whether to accept or reject the shipment and why"""
 
         # Call Nova with the image
         bedrock = boto3.client("bedrock-runtime", region_name="us-west-1")

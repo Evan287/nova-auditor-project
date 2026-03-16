@@ -57,11 +57,14 @@ function AgentAnalysis({
           const partName = content.replace(/:$/, "").trim();
           const qtyMatch = text.match(
             new RegExp(
-              `${partName}[\\s\\S]*?Suggested Reorder Quantity[:\\s]*\\*?\\*?(\\d+)`,
+              `${partName}[\\s\\S]*?\\*?\\*?Suggested Reorder Quantity:\\*?\\*?\\s*(\\d+)`,
               "i",
             ),
           );
           const quantity = qtyMatch ? parseInt(qtyMatch[1]) : 0;
+          console.log("partName:", partName);
+          console.log("qtyMatch:", qtyMatch);
+          console.log("quantity:", quantity);
           const isApproved = approved[partName];
           const isApproving = approving[partName];
 
